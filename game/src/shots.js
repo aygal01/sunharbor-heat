@@ -1,79 +1,161 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// The staged scenes behind ?shot=cover|chase|foot|mission|beach (shots.json uses cover,
+// foot, mission and beach). Each one takes the freshly built game and moves its real
+// cars, walkers and police into a composed moment — a downtown chase, a busy crossing, a
+// drive at a checkpoint, a sunset cruise — sets the wanted level and the objective the
+// HUD should show, and freezes it. Same seed, same frame, every run.
+import { STORY_MISSIONS } from './missions.js';
+import { setWanted } from './police.js';
+import { CAR_TYPES, createCar } from './vehicles.js';
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
-
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
-  }
-  return Infinity;
+/** Move a traffic car to an exact spot and heading for a staged frame. */
+function placeTraffic(game, index, x, y, angle) {
+  const car = game.trafficCars[index % game.trafficCars.length];
+  car.x = x;
+  car.y = y;
+  car.angle = angle;
+  car.speed = 0;
+  return car;
 }
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
+/** Scatter walkers around a point so a staged street feels lived in. */
+function placePeds(game, cx, cy, count) {
+  const spots = [
+    [52, -38], [-64, 24], [30, 66], [-38, -70], [86, 44], [-96, -30], [12, -104], [110, -58],
+  ];
+  for (let i = 0; i < count; i += 1) {
+    const ped = game.peds[i % game.peds.length];
+    const [dx, dy] = spots[i % spots.length];
+    ped.x = cx + dx;
+    ped.y = cy + dy;
+    ped.state = 'walk';
+    ped.angle = (i * 1.3) % (Math.PI * 2);
   }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
+}
+
+/** Park two extra cars at a crossing for depth. */
+function placeParked(game, index, x, y, angle) {
+  const car = game.parkedCars[index % game.parkedCars.length];
+  car.x = x;
+  car.y = y;
+  car.angle = angle;
+  return car;
+}
+
+function stageCover(game) {
+  // A chase through the Coral Boulevard / Solstice crossing, three stars up.
+  const p = game.player;
+  const car = placeTraffic(game, 0, 2080, 1466, 0);
+  p.car = car;
+  car.driver = 'player';
+  car.typeName = 'sport';
+  car.type = CAR_TYPES.sport;
+  car.color = '#e8c97a';
+  p.x = car.x;
+  p.y = car.y;
+  p.angle = 0;
+  const cop1 = createCar(game.rng, 'police', 1935, 1398, 0.18, 'police');
+  const cop2 = createCar(game.rng, 'police', 1862, 1510, -0.08, 'police');
+  game.police.cars.push(cop1, cop2);
+  setWanted(game.police, 3);
+  placeTraffic(game, 1, 2330, 1336, Math.PI);
+  placeTraffic(game, 2, 2460, 1466, Math.PI);
+  placeTraffic(game, 3, 2266, 1180, Math.PI / 2);
+  placeTraffic(game, 4, 2134, 1700, -Math.PI / 2);
+  placeParked(game, 0, 2036, 1560, Math.PI / 2);
+  placePeds(game, 2200, 1400, 6);
+  game.missions.active = { def: STORY_MISSIONS[0], stageIndex: 1, timeLeft: 96 };
+  game.objectiveOverride = {
+    title: 'First Run',
+    text: 'Deliver the crate to the Dockside warehouse',
+    target: { x: 700, y: 2380 },
+    timeLeft: 96,
+  };
+  game.cameraOverride = { x: 2080 - 640, y: 1466 - 360 };
+}
+
+function stageFoot(game) {
+  // On foot at the same busy crossing, late light, traffic and walkers everywhere.
+  const p = game.player;
+  p.car = null;
+  p.x = 2122;
+  p.y = 1330;
+  p.angle = 0.7;
+  placeTraffic(game, 0, 2330, 1336, Math.PI);
+  placeTraffic(game, 1, 1980, 1466, 0);
+  placeTraffic(game, 2, 2266, 1150, Math.PI / 2);
+  placeTraffic(game, 3, 2134, 1690, -Math.PI / 2);
+  placeTraffic(game, 4, 2560, 1336, Math.PI);
+  placeParked(game, 0, 2036, 1560, Math.PI / 2);
+  placeParked(game, 1, 2364, 1240, -Math.PI / 2);
+  placePeds(game, 2200, 1400, 8);
+  game.cameraOverride = { x: 2122 - 640, y: 1330 - 360 };
+}
+
+function stageMission(game) {
+  // Mid-mission: Raka drives west toward the glowing warehouse checkpoint, timer running.
+  const p = game.player;
+  const car = placeTraffic(game, 0, 1330, 2266, Math.PI);
+  p.car = car;
+  car.driver = 'player';
+  car.color = '#c94f43';
+  p.x = car.x;
+  p.y = car.y;
+  p.angle = Math.PI;
+  placeTraffic(game, 1, 1050, 2134, 0);
+  placeTraffic(game, 2, 1620, 2266, Math.PI);
+  placeTraffic(game, 3, 866, 1980, Math.PI / 2);
+  placePeds(game, 900, 2300, 4);
+  game.missions.active = { def: STORY_MISSIONS[0], stageIndex: 1, timeLeft: 118 };
+  game.objectiveOverride = {
+    title: 'First Run',
+    text: 'Deliver the crate to the Dockside warehouse',
+    target: { x: 700, y: 2380 },
+    timeLeft: 118,
+  };
+  game.cameraOverride = { x: 1330 - 640, y: 2266 - 360 };
+}
+
+function stageBeach(game) {
+  // Sunset cruise along the shore: sand, palms and water, one star of flavour.
+  const p = game.player;
+  const car = placeTraffic(game, 0, 4300, 1500, Math.PI / 2);
+  p.car = car;
+  car.driver = 'player';
+  car.typeName = 'cruiser';
+  car.type = CAR_TYPES.cruiser;
+  car.color = '#d96f32';
+  p.x = car.x;
+  p.y = car.y;
+  p.angle = Math.PI / 2;
+  // Extra staged palms and a beach umbrella dress the shoreline.
+  game.city.palms.push(
+    { x: 4245, y: 1330, size: 1.25, seed: 42 },
+    { x: 4365, y: 1620, size: 1.1, seed: 77 },
+    { x: 4150, y: 1700, size: 0.95, seed: 91 },
+  );
+  game.city.props.push({ kind: 'umbrella', x: 4370, y: 1415, color: '#e2543e' });
+  const cop = createCar(game.rng, 'police', 3866, 1190, Math.PI / 2, 'police');
+  game.police.cars.push(cop);
+  setWanted(game.police, 1);
+  placeTraffic(game, 1, 3734, 1336, 0);
+  placePeds(game, 4030, 1330, 5);
+  game.objectiveOverride = {
+    title: 'SunPost Courier',
+    text: 'Deliver the parcel',
+    target: { x: 4030, y: 720 },
+    timeLeft: null,
+  };
+  game.clockMinutes = 18 * 60 + 42;
+  game.cameraOverride = { x: 4300 - 640, y: 1500 - 360 };
 }
 
 /**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
+ * Set the game to the named scene. 'chase' is an alias of the cover chase; any other
+ * unknown name falls back to the cover scene so a bad query still yields a frame.
  */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
-  }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
-  }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+export function stageShot(name, game) {
+  if (name === 'foot') stageFoot(game);
+  else if (name === 'mission') stageMission(game);
+  else if (name === 'beach') stageBeach(game);
+  else stageCover(game);
 }
