@@ -20,19 +20,20 @@ export const COAST = { boardwalkX: 3980, sandX: 4080, waterX: 4460 };
 
 /** The warm sunset palette every district tints from. */
 export const PALETTE = {
-  asphalt: '#3d3a44',
-  asphaltDark: '#353240',
-  laneMarking: '#e8c97a',
-  sidewalk: '#8d8578',
-  sidewalkEdge: '#6f695e',
-  grass: '#5d7d43',
-  sand: '#e6c98c',
-  sandDark: '#d9b878',
-  water: '#2e6f8e',
-  waterLight: '#4d94b5',
-  boardwalk: '#9a6b45',
-  boardwalkDark: '#7d5636',
-  shadow: 'rgba(43, 24, 16, 0.35)',
+  asphalt: '#57493f',
+  asphaltDark: '#4a3d35',
+  asphaltPatch: '#63544a',
+  laneMarking: '#f0cd72',
+  sidewalk: '#b5a68d',
+  sidewalkEdge: '#8f7f66',
+  grass: '#6f9a4c',
+  sand: '#eecf95',
+  sandDark: '#dbba74',
+  water: '#2b7d9c',
+  waterLight: '#57aec9',
+  boardwalk: '#a97a4e',
+  boardwalkDark: '#86603a',
+  shadow: 'rgba(58, 30, 14, 0.32)',
   playerShirt: '#e2543e',
   playerPants: '#2e3d55',
   skin: '#c98a5e',
@@ -50,12 +51,12 @@ export const DISTRICT = {
 
 /** District ground colours under the roads and buildings. */
 export const DISTRICT_GROUND = {
-  downtown: '#7a7268',
-  suburbs: '#55703d',
-  industrial: '#6e6257',
-  marina: '#7d7466',
-  beach: '#e6c98c',
-  midtown: '#776f60',
+  downtown: '#8a7a64',
+  suburbs: '#67914a',
+  industrial: '#7d6a54',
+  marina: '#8b7c64',
+  beach: '#eecf95',
+  midtown: '#86755e',
 };
 
 /** Street names, west to east for the vertical roads, north to south for the horizontal. */

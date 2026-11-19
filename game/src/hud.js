@@ -40,13 +40,13 @@ function drawMinimap(g, game, viewW, viewH) {
   g.beginPath();
   g.rect(x0, y0, w, h);
   g.clip();
-  g.fillStyle = '#776f60';
+  g.fillStyle = '#9a8a6d';
   g.fillRect(x0, y0, w, h);
   g.fillStyle = PALETTE.sand;
   g.fillRect(px(COAST.sandX), y0, (game.city.width - COAST.sandX) * sx, h);
   g.fillStyle = PALETTE.water;
   g.fillRect(px(COAST.waterX), y0, (game.city.width - COAST.waterX) * sx, h);
-  g.strokeStyle = 'rgba(30,28,36,0.85)';
+  g.strokeStyle = '#453f33';
   g.lineWidth = Math.max(1.4, GRID.roadWidth * sx * 0.8);
   for (const vx of game.city.trafficVRoads) {
     g.beginPath();
@@ -63,8 +63,8 @@ function drawMinimap(g, game, viewW, viewH) {
   // Police blips flash blue/red; the objective is a gold diamond; the giver is green.
   const flash = Math.floor(game.time * 2.4) % 2 === 0;
   g.fillStyle = flash ? '#3f8fff' : '#ff4d4d';
-  for (const car of game.police.cars) g.fillRect(px(car.x) - 2, py(car.y) - 2, 4, 4);
-  for (const officer of game.police.officers) g.fillRect(px(officer.x) - 2, py(officer.y) - 2, 4, 4);
+  for (const car of game.police.cars) g.fillRect(px(car.x) - 2.5, py(car.y) - 2.5, 5, 5);
+  for (const officer of game.police.officers) g.fillRect(px(officer.x) - 2.5, py(officer.y) - 2.5, 5, 5);
   const objective = game.objective;
   if (objective && objective.target) {
     g.fillStyle = '#ffd23e';

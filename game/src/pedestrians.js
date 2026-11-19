@@ -5,8 +5,8 @@
 // their positions when a crime is reported.
 import { collideCircle } from './world.js';
 
-const SHIRTS = ['#e8c97a', '#7dc9e8', '#e87d9a', '#9ae87d', '#e8e2d4', '#b48ee8', '#e8975a', '#5ad9c2'];
-const PANTS = ['#3d4b5c', '#5c4a3d', '#2e3d55', '#6e6257', '#445544'];
+const SHIRTS = ['#ffd23e', '#4fc3e8', '#ff7d9a', '#8ae86a', '#f2ede2', '#c09af2', '#ff9a4d', '#3fe0c8', '#ff5a4d', '#7da2ff'];
+const PANTS = ['#3d4b5c', '#5c4a3d', '#2e3d55', '#6e6257', '#445544', '#7a3d55'];
 
 /** The four sidewalk corners of a block, just outside its building line. */
 function blockCorners(block) {

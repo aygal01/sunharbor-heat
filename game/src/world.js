@@ -6,14 +6,14 @@
 // raw geometry the minimap draws. Same seed, same city, every visit.
 import { COAST, DISTRICT, GRID, WORLD } from './config.js';
 
-/** Building paint per district: wall colours to choose from, roof colour, floor range. */
+/** Building paint per district: wall colours to choose from, roof colours, floor range. */
 const DISTRICT_STYLE = {
-  downtown: { walls: ['#7d8ea3', '#a3836b', '#8a94a6', '#b08d6a', '#6f8296'], roof: '#4c4653', floors: [8, 14] },
-  midtown: { walls: ['#b59a77', '#a88f74', '#97a0a8', '#c2a37e'], roof: '#5d5348', floors: [3, 6] },
-  suburbs: { walls: ['#d9c39a', '#c9d1b8', '#e0b7a0', '#b8c9d9'], roof: '#8a5a44', floors: [1, 1] },
-  industrial: { walls: ['#8a7f72', '#77828a', '#94826a'], roof: '#57504a', floors: [1, 2] },
-  marina: { walls: ['#cfd6cf', '#bcd0d4', '#e3d3ae'], roof: '#6b5a49', floors: [2, 3] },
-  beach: { walls: [], roof: '#000000', floors: [0, 0] },
+  downtown: { walls: ['#8ba0b8', '#b08d6a', '#97a5b8', '#c09a72', '#7d94ac'], roofs: ['#5f7d99', '#71879c', '#93765a', '#66788c', '#a08b6d', '#54707f'], floors: [8, 14] },
+  midtown: { walls: ['#c2a37e', '#b59a77', '#a8b2ba', '#cdb088'], roofs: ['#b07a45', '#8f6a4f', '#c19a63', '#7d6a58', '#a85f3d'], floors: [3, 6] },
+  suburbs: { walls: ['#e2cc9e', '#cfdbbc', '#e6bfa8', '#bfd2e2'], roofs: ['#b0603c', '#a45536', '#c07a4a', '#7d8a5f', '#9c4a2f'], floors: [1, 1] },
+  industrial: { walls: ['#978a7a', '#84929c', '#a08a6c'], roofs: ['#9c5a3c', '#4d7d7a', '#8a6a4a', '#6e6257', '#7a4a38'], floors: [1, 2] },
+  marina: { walls: ['#d8dfd8', '#c4dbe0', '#ecd9b2'], roofs: ['#5f8f88', '#7a9a94', '#c2a37e', '#4d7d7a'], floors: [2, 3] },
+  beach: { walls: [], roofs: ['#000000'], floors: [0, 0] },
 };
 
 const CONTAINER_COLORS = ['#b3543f', '#3f6fb3', '#4d8a4f', '#c2a13d', '#7a5fa3'];
@@ -33,7 +33,7 @@ function makeBuilding(rng, x, y, w, h, district) {
   return {
     x, y, w, h, district,
     color: rng.pick(style.walls),
-    roof: style.roof,
+    roof: rng.pick(style.roofs),
     floors: rng.int(style.floors[0], style.floors[1]),
     seed: rng.int(1, 100000),
   };
@@ -43,10 +43,14 @@ function makeBuilding(rng, x, y, w, h, district) {
 function fillBlock(rng, block, buildings, colliders, props) {
   const { x, y, w, h, district } = block;
   if (district === DISTRICT.BEACH) {
-    // Open sand: a few umbrellas and palms, nothing to crash into.
-    const umbrellas = rng.int(1, 3);
+    // Open sand: umbrellas, towels and palms, nothing to crash into.
+    const umbrellas = rng.int(2, 4);
     for (let i = 0; i < umbrellas; i += 1) {
-      props.push({ kind: 'umbrella', x: rng.range(x + 30, x + w - 30), y: rng.range(y + 30, y + h - 30), color: rng.pick(['#e2543e', '#3f8fb3', '#e8c97a']) });
+      props.push({ kind: 'umbrella', x: rng.range(x + 30, x + w - 30), y: rng.range(y + 30, y + h - 30), color: rng.pick(['#e2543e', '#3f8fb3', '#e8c97a', '#ff7d9a']) });
+    }
+    const towels = rng.int(1, 3);
+    for (let i = 0; i < towels; i += 1) {
+      props.push({ kind: 'towel', x: rng.range(x + 24, x + w - 24), y: rng.range(y + 24, y + h - 24), color: rng.pick(['#ff7d9a', '#ffd23e', '#4fc3e8', '#8ae86a', '#f2ede2']), angle: rng.range(0, Math.PI) });
     }
     return;
   }
@@ -116,15 +120,27 @@ export function generateCity(rng) {
   // The sea itself is a wall: nobody walks or drives on water.
   colliders.push({ x: COAST.waterX, y: -64, w: WORLD.width - COAST.waterX + 128, h: WORLD.height + 128 });
 
-  // Palms line the boardwalk and dot the suburbs and beach blocks.
+  // Palms line the boardwalk and the sand's edge, shade Palm Terrace, and dot the
+  // suburbs and beach blocks.
   const palms = [];
-  for (let y = 60; y < WORLD.height - 40; y += rng.range(70, 130)) {
-    palms.push({ x: COAST.boardwalkX + rng.range(14, 66), y, size: rng.range(0.8, 1.3), seed: rng.int(1, 9999) });
+  for (let y = 60; y < WORLD.height - 40; y += rng.range(55, 100)) {
+    palms.push({ x: COAST.boardwalkX + rng.range(14, 66), y, size: rng.range(0.85, 1.35), seed: rng.int(1, 9999) });
+  }
+  for (let y = 90; y < WORLD.height - 40; y += rng.range(80, 140)) {
+    palms.push({ x: COAST.sandX + rng.range(26, 84), y, size: rng.range(0.8, 1.25), seed: rng.int(1, 9999) });
+  }
+  for (let y = 120; y < WORLD.height - 60; y += rng.range(150, 230)) {
+    palms.push({ x: 3800 - GRID.roadWidth / 2 - 26, y, size: rng.range(0.8, 1.15), seed: rng.int(1, 9999) });
+    palms.push({ x: 3800 + GRID.roadWidth / 2 + 26, y: y + 60, size: rng.range(0.8, 1.15), seed: rng.int(1, 9999) });
   }
   for (const block of blocks) {
     if ((block.district === DISTRICT.SUBURBS || block.district === DISTRICT.BEACH) && rng.chance(0.7)) {
       palms.push({ x: rng.range(block.x + 16, block.x + block.w - 16), y: rng.range(block.y + 16, block.y + block.h - 16), size: rng.range(0.7, 1.1), seed: rng.int(1, 9999) });
     }
+  }
+  // Lifeguard stands watch the swimming shore.
+  for (let y = 480; y < WORLD.height - 200; y += 640) {
+    props.push({ kind: 'lifeguard', x: COAST.waterX - 52, y });
   }
 
   // Street lamps along every drivable road, boats at anchor off the marina shore.
@@ -137,11 +153,17 @@ export function generateCity(rng) {
     for (let x = 150; x < 3900; x += 340) lamps.push({ x, y: y - halfRoad - 8 });
   }
   const boats = [];
-  for (let i = 0; i < 9; i += 1) {
-    boats.push({ x: rng.range(COAST.waterX + 60, WORLD.width - 90), y: rng.range(2350, 3450), angle: rng.range(-0.4, 0.4), color: rng.pick(['#e8e2d4', '#b3543f', '#3f6fb3', '#e8c97a']) });
+  for (let i = 0; i < 15; i += 1) {
+    const nearMarina = i < 9;
+    boats.push({
+      x: rng.range(COAST.waterX + 60, WORLD.width - 90),
+      y: nearMarina ? rng.range(2350, 3450) : rng.range(200, 2250),
+      angle: rng.range(-0.4, 0.4),
+      color: rng.pick(['#e8e2d4', '#b3543f', '#3f6fb3', '#e8c97a', '#3fa39a']),
+    });
   }
   const piers = [];
-  for (const y of [2520, 2920, 3320]) piers.push({ x: COAST.waterX - 10, y, w: 190, h: 26 });
+  for (const y of [1560, 2520, 2920, 3320]) piers.push({ x: COAST.waterX - 10, y, w: 190, h: 26 });
 
   // Parked-car spots hug the kerbs of the drivable roads, clear of intersections.
   const parkedSpots = [];

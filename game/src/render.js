@@ -48,6 +48,7 @@ export function createRenderer(canvas) {
   const g = canvas.getContext('2d');
   const view = { w: 1280, h: 720 };
   const camera = { x: 0, y: 0 };
+  let vignette = null;
 
   function resize() {
     const ratio = window.devicePixelRatio || 1;
@@ -103,6 +104,16 @@ export function createRenderer(canvas) {
       g.stroke();
     }
     g.globalAlpha = 1;
+    // A foam line breathing along the water's edge.
+    g.strokeStyle = 'rgba(240,250,252,0.45)';
+    g.lineWidth = 3;
+    g.beginPath();
+    let foamStarted = false;
+    for (let y = Math.max(0, camera.y - 30); y < Math.min(city.height, camera.y + view.h + 30); y += 26) {
+      const fx = COAST.waterX + 3 + Math.sin(y * 0.045 + t * 1.3) * 4;
+      if (!foamStarted) { g.moveTo(fx, y); foamStarted = true; } else g.lineTo(fx, y);
+    }
+    g.stroke();
     // Boardwalk planks.
     g.fillStyle = PALETTE.boardwalk;
     g.fillRect(COAST.boardwalkX, 0, COAST.sandX - COAST.boardwalkX, city.height);
@@ -114,6 +125,15 @@ export function createRenderer(canvas) {
       g.moveTo(COAST.boardwalkX, y);
       g.lineTo(COAST.sandX, y);
       g.stroke();
+    }
+    // Sun-baked speckle: faint light and dark patches break up every flat ground.
+    for (let gx = Math.floor(camera.x / 92) * 92; gx < camera.x + view.w + 92; gx += 92) {
+      for (let gy = Math.floor(camera.y / 92) * 92; gy < camera.y + view.h + 92; gy += 92) {
+        const hsh = hash(gx * 3.7 + gy * 9.1);
+        if (hsh < 0.42) continue;
+        g.fillStyle = hsh > 0.78 ? 'rgba(255,238,200,0.05)' : 'rgba(40,22,10,0.05)';
+        g.fillRect(gx + hsh * 40, gy + hsh * 30, 30 + hsh * 26, 16 + hsh * 14);
+      }
     }
   }
 
@@ -132,6 +152,34 @@ export function createRenderer(canvas) {
       g.fillRect(vx - half, 0, GRID.roadWidth, city.height);
     }
     for (const hy of city.hRoads) g.fillRect(0, hy - half, COAST.waterX, GRID.roadWidth);
+    // Patched, sun-worn asphalt: darker repair patches and pale bleached spots.
+    for (const vx of city.trafficVRoads) {
+      for (let y = 60; y < city.height; y += 150) {
+        const hsh = hash(vx * 1.3 + y * 0.71);
+        if (hsh < 0.45 || !inView(vx, y, 70)) continue;
+        g.fillStyle = hsh > 0.8 ? 'rgba(255,226,180,0.07)' : 'rgba(24,16,12,0.10)';
+        g.fillRect(vx - half + 8 + hsh * 46, y, 34 + hsh * 28, 46);
+      }
+    }
+    for (const hy of city.hRoads) {
+      for (let x = 60; x < COAST.waterX; x += 150) {
+        const hsh = hash(hy * 1.7 + x * 0.53);
+        if (hsh < 0.45 || !inView(x, hy, 70)) continue;
+        g.fillStyle = hsh > 0.8 ? 'rgba(255,226,180,0.07)' : 'rgba(24,16,12,0.10)';
+        g.fillRect(x, hy - half + 8 + hsh * 46, 46, 34 + hsh * 28);
+      }
+    }
+    // Pale edge lines along the kerbs.
+    g.fillStyle = 'rgba(245,238,220,0.20)';
+    for (const vx of city.vRoads) {
+      if (vx > COAST.boardwalkX) continue;
+      g.fillRect(vx - half + 3, 0, 2.4, city.height);
+      g.fillRect(vx + half - 5.4, 0, 2.4, city.height);
+    }
+    for (const hy of city.hRoads) {
+      g.fillRect(0, hy - half + 3, COAST.waterX, 2.4);
+      g.fillRect(0, hy + half - 5.4, COAST.waterX, 2.4);
+    }
     // Lane dashes down the centre of every road.
     g.fillStyle = PALETTE.laneMarking;
     g.globalAlpha = 0.75;
@@ -148,6 +196,35 @@ export function createRenderer(canvas) {
       }
     }
     g.globalAlpha = 1;
+    // Zebra crosswalks on every approach to an intersection.
+    g.fillStyle = 'rgba(245,242,235,0.40)';
+    for (const vx of city.trafficVRoads) {
+      for (const hy of city.hRoads) {
+        if (!inView(vx, hy, 200)) continue;
+        for (let s = -1; s <= 1; s += 2) {
+          const by = hy + s * (half + 12);
+          for (let x = vx - half + 8; x < vx + half - 8; x += 15) g.fillRect(x, by - 9, 8, 18);
+          const bx = vx + s * (half + 12);
+          for (let y = hy - half + 8; y < hy + half - 8; y += 15) g.fillRect(bx - 9, y, 18, 8);
+        }
+      }
+    }
+    // Painted direction arrows in the lanes, pointing the way traffic flows.
+    g.fillStyle = 'rgba(245,242,235,0.30)';
+    for (const vx of city.trafficVRoads) {
+      for (let y = 330; y < city.height; y += 780) {
+        if (city.hRoads.some((hy) => Math.abs(hy - y) < half + 60)) continue;
+        if (inView(vx - 32, y, 60)) drawArrow(vx - 32, y, Math.PI / 2);
+        if (inView(vx + 32, y + 390, 60)) drawArrow(vx + 32, y + 390, -Math.PI / 2);
+      }
+    }
+    for (const hy of city.hRoads) {
+      for (let x = 430; x < 3900; x += 820) {
+        if (city.vRoads.some((vx) => Math.abs(vx - x) < half + 60)) continue;
+        if (inView(x, hy + 32, 60)) drawArrow(x, hy + 32, 0);
+        if (inView(x + 410, hy - 32, 60)) drawArrow(x + 410, hy - 32, Math.PI);
+      }
+    }
     // Street names painted on the asphalt.
     g.fillStyle = 'rgba(255,255,255,0.20)';
     g.font = `700 15px ${FONT}`;
@@ -170,6 +247,24 @@ export function createRenderer(canvas) {
     });
   }
 
+  /** A chunky painted arrow, pointing along +x before rotation. */
+  function drawArrow(x, y, angle) {
+    g.save();
+    g.translate(x, y);
+    g.rotate(angle);
+    g.beginPath();
+    g.moveTo(16, 0);
+    g.lineTo(2, -8);
+    g.lineTo(2, -3.4);
+    g.lineTo(-14, -3.4);
+    g.lineTo(-14, 3.4);
+    g.lineTo(2, 3.4);
+    g.lineTo(2, 8);
+    g.closePath();
+    g.fill();
+    g.restore();
+  }
+
   /** Multiply a #rrggbb colour by a factor, for per-building roof variety. */
   function shade(hex, factor) {
     const n = Number.parseInt(hex.slice(1), 16);
@@ -184,38 +279,120 @@ export function createRenderer(canvas) {
     const lift = Math.min(15, 3 + b.floors * 1.1);
     const ox = lift * 0.35;
     const oy = lift * 0.45;
+    const rx = b.x - ox;
+    const ry = b.y - oy;
     // Shadow, then the wall block, then the roof shifted up-left by the building's height.
     g.fillStyle = PALETTE.shadow;
     g.fillRect(b.x + 10, b.y + 12, b.w, b.h);
     g.fillStyle = b.color;
     g.fillRect(b.x, b.y, b.w, b.h);
-    g.fillStyle = shade(b.roof, 0.82 + hash(b.seed + 5) * 0.36);
-    g.fillRect(b.x - ox, b.y - oy, b.w, b.h);
-    g.strokeStyle = 'rgba(20,14,10,0.35)';
+    g.fillStyle = shade(b.roof, 0.9 + hash(b.seed + 5) * 0.22);
+    g.fillRect(rx, ry, b.w, b.h);
+    // Parapet: a raised lip around the roof edge, its inner side catching the sun.
+    g.strokeStyle = shade(b.roof, 1.3);
+    g.lineWidth = 3;
+    g.strokeRect(rx + 2, ry + 2, b.w - 4, b.h - 4);
+    g.strokeStyle = 'rgba(20,14,10,0.4)';
     g.lineWidth = 1.5;
-    g.strokeRect(b.x - ox, b.y - oy, b.w, b.h);
-    // A sunlit facade band inside the roof's south edge, with lit windows, on the
-    // taller buildings; low houses and warehouses stay plain-roofed.
+    g.strokeRect(rx, ry, b.w, b.h);
+    // Rooftop life, seeded per building: a garden, dockside solar panels, AC boxes
+    // with fan discs, and a water tower on some of the tall blocks.
+    const detail = hash(b.seed + 11);
+    if (detail < 0.2 && b.w > 90 && b.h > 70) {
+      g.fillStyle = '#5d8a42';
+      g.fillRect(rx + b.w * 0.14, ry + b.h * 0.12, b.w * 0.4, b.h * 0.34);
+      g.fillStyle = '#79a856';
+      for (let i = 0; i < 4; i += 1) {
+        g.beginPath();
+        g.arc(rx + b.w * (0.2 + hash(b.seed + i * 3) * 0.28), ry + b.h * (0.16 + hash(b.seed + i * 5) * 0.24), 5 + hash(b.seed + i) * 4, 0, Math.PI * 2);
+        g.fill();
+      }
+    } else if (detail > 0.82 && (b.district === 'industrial' || b.district === 'marina')) {
+      g.fillStyle = '#22354f';
+      g.fillRect(rx + b.w * 0.16, ry + b.h * 0.14, b.w * 0.52, b.h * 0.4);
+      g.strokeStyle = 'rgba(140,190,220,0.5)';
+      g.lineWidth = 1;
+      for (let i = 1; i < 4; i += 1) {
+        g.beginPath();
+        g.moveTo(rx + b.w * 0.16 + (b.w * 0.52 * i) / 4, ry + b.h * 0.14);
+        g.lineTo(rx + b.w * 0.16 + (b.w * 0.52 * i) / 4, ry + b.h * 0.54);
+        g.stroke();
+      }
+    }
+    const acCount = 1 + Math.floor(hash(b.seed + 21) * 3);
+    for (let i = 0; i < acCount; i += 1) {
+      const ax = rx + 10 + hash(b.seed + i * 7) * Math.max(4, b.w - 46);
+      const ay = ry + 10 + hash(b.seed + i * 13) * Math.max(4, b.h - 64);
+      g.fillStyle = '#a8b2ba';
+      g.fillRect(ax, ay, 22, 16);
+      g.fillStyle = 'rgba(30,34,40,0.55)';
+      g.beginPath();
+      g.arc(ax + 11, ay + 8, 5, 0, Math.PI * 2);
+      g.fill();
+    }
+    if (b.floors >= 6 && hash(b.seed + 31) < 0.38) {
+      const tx = rx + b.w - 42;
+      const ty = ry + 10;
+      g.strokeStyle = '#5d4630';
+      g.lineWidth = 2.4;
+      g.beginPath();
+      g.moveTo(tx + 3, ty + 26);
+      g.lineTo(tx + 8, ty + 12);
+      g.moveTo(tx + 21, ty + 26);
+      g.lineTo(tx + 16, ty + 12);
+      g.stroke();
+      g.fillStyle = '#9c7448';
+      g.fillRect(tx, ty, 24, 15);
+      g.fillStyle = '#77572f';
+      g.beginPath();
+      g.moveTo(tx - 2, ty);
+      g.lineTo(tx + 12, ty - 8);
+      g.lineTo(tx + 26, ty);
+      g.closePath();
+      g.fill();
+    }
+    // A sunlit facade band inside the roof's south edge, with lit windows; taller
+    // buildings carry more rows, low blocks get a single row, houses a door and glass.
     if (b.floors >= 3) {
-      const rows = b.floors >= 7 ? 2 : 1;
-      const bandH = rows * 10 + 5;
-      const bandY = b.y - oy + b.h - bandH;
-      g.fillStyle = shade(b.color, 1.06);
-      g.fillRect(b.x - ox + 2, bandY, b.w - 4, bandH - 2);
-      const cols = Math.max(2, Math.floor(b.w / 16));
+      const rows = b.floors >= 10 ? 3 : b.floors >= 7 ? 2 : 1;
+      const bandH = rows * 11 + 6;
+      const bandY = ry + b.h - bandH;
+      g.fillStyle = shade(b.color, 1.1);
+      g.fillRect(rx + 2, bandY, b.w - 4, bandH - 2);
+      const cols = Math.max(2, Math.floor(b.w / 14));
       for (let c = 0; c < cols; c += 1) {
         for (let r = 0; r < rows; r += 1) {
-          const lit = hash(b.seed + c * 31 + r * 57) > 0.45;
-          g.fillStyle = lit ? 'rgba(255,205,110,0.92)' : 'rgba(30,36,48,0.55)';
-          g.fillRect(b.x - ox + 6 + c * 16, bandY + 3 + r * 10, 7, 5);
+          const lit = hash(b.seed + c * 31 + r * 57) > 0.42;
+          g.fillStyle = lit ? 'rgba(255,214,120,0.95)' : 'rgba(28,34,46,0.6)';
+          g.fillRect(rx + 5 + c * 14, bandY + 3 + r * 11, 8, 6);
         }
       }
-      // Roof clutter on the taller blocks: vents and water tanks.
-      g.fillStyle = 'rgba(0,0,0,0.22)';
-      const n = 1 + Math.floor(hash(b.seed) * 3);
-      for (let i = 0; i < n; i += 1) {
-        g.fillRect(b.x + hash(b.seed + i * 7) * (b.w - 34), b.y + hash(b.seed + i * 13) * (b.h - 30 - bandH), 20, 14);
+    } else if (b.floors === 2) {
+      const cols = Math.max(2, Math.floor(b.w / 16));
+      for (let c = 0; c < cols; c += 1) {
+        const lit = hash(b.seed + c * 31) > 0.5;
+        g.fillStyle = lit ? 'rgba(255,214,120,0.9)' : 'rgba(28,34,46,0.55)';
+        g.fillRect(rx + 6 + c * 16, ry + b.h - 13, 8, 6);
       }
+    } else if (b.floors === 1) {
+      g.fillStyle = 'rgba(40,26,16,0.65)';
+      g.fillRect(rx + b.w * 0.44, ry + b.h - 10, 9, 9);
+      g.fillStyle = 'rgba(255,220,150,0.75)';
+      g.fillRect(rx + b.w * 0.66, ry + b.h - 11, 12, 7);
+    }
+    // Storefront awnings on the shopping streets: striped canvas over the pavement.
+    if ((b.district === 'midtown' || b.district === 'marina') && hash(b.seed + 41) < 0.55) {
+      const accent = b.district === 'midtown' ? '#c2543a' : '#2f8f86';
+      const aw = Math.min(b.w - 12, 120);
+      const ax = rx + (b.w - aw) / 2;
+      const ay = ry + b.h + 1;
+      const stripes = Math.max(2, Math.floor(aw / 10));
+      for (let s = 0; s < stripes; s += 1) {
+        g.fillStyle = s % 2 === 0 ? accent : '#f2e8d5';
+        g.fillRect(ax + s * 10, ay, 10, 7);
+      }
+      g.fillStyle = 'rgba(20,14,10,0.25)';
+      g.fillRect(ax, ay + 7, stripes * 10, 2);
     }
   }
 
@@ -243,6 +420,21 @@ export function createRenderer(canvas) {
       g.fill();
       g.fillStyle = '#f2ede2';
       g.fillRect(-7, -5, 13, 10);
+      if (hash(boat.x * 0.37) > 0.4) {
+        g.strokeStyle = '#5d4630';
+        g.lineWidth = 1.6;
+        g.beginPath();
+        g.moveTo(2, 0);
+        g.lineTo(2, -14);
+        g.stroke();
+        g.fillStyle = 'rgba(246,240,225,0.92)';
+        g.beginPath();
+        g.moveTo(3.5, -13);
+        g.lineTo(3.5, -1);
+        g.lineTo(12, -1);
+        g.closePath();
+        g.fill();
+      }
       g.restore();
     }
     for (const prop of city.props) {
@@ -260,14 +452,54 @@ export function createRenderer(canvas) {
           g.stroke();
         }
       } else if (prop.kind === 'umbrella') {
+        g.fillStyle = PALETTE.shadow;
+        g.beginPath();
+        g.ellipse(prop.x + 5, prop.y + 6, 17, 6, 0, 0, Math.PI * 2);
+        g.fill();
+        for (let s = 0; s < 6; s += 1) {
+          g.fillStyle = s % 2 === 0 ? prop.color : '#f6efe0';
+          g.beginPath();
+          g.moveTo(prop.x, prop.y);
+          g.arc(prop.x, prop.y, 19, (s / 6) * Math.PI * 2, ((s + 1) / 6) * Math.PI * 2);
+          g.closePath();
+          g.fill();
+        }
+        g.fillStyle = '#7d5a36';
+        g.beginPath();
+        g.arc(prop.x, prop.y, 2.6, 0, Math.PI * 2);
+        g.fill();
+      } else if (prop.kind === 'towel') {
+        g.save();
+        g.translate(prop.x, prop.y);
+        g.rotate(prop.angle);
         g.fillStyle = prop.color;
+        g.fillRect(-13, -8, 26, 16);
+        g.fillStyle = 'rgba(255,255,255,0.55)';
+        g.fillRect(-13, -2.5, 26, 5);
+        g.restore();
+      } else if (prop.kind === 'lifeguard') {
+        g.fillStyle = PALETTE.shadow;
+        g.fillRect(prop.x - 12, prop.y + 12, 30, 6);
+        g.strokeStyle = '#e8e2d4';
+        g.lineWidth = 3;
         g.beginPath();
-        g.arc(prop.x, prop.y, 15, 0, Math.PI * 2);
-        g.fill();
-        g.fillStyle = 'rgba(255,255,255,0.5)';
+        g.moveTo(prop.x - 10, prop.y + 14);
+        g.lineTo(prop.x - 3, prop.y - 6);
+        g.moveTo(prop.x + 10, prop.y + 14);
+        g.lineTo(prop.x + 3, prop.y - 6);
+        g.stroke();
+        g.fillStyle = '#f2ede2';
+        g.fillRect(prop.x - 9, prop.y - 14, 18, 10);
+        g.fillStyle = '#d43a2e';
         g.beginPath();
-        g.arc(prop.x, prop.y, 6, 0, Math.PI * 2);
+        g.moveTo(prop.x - 12, prop.y - 14);
+        g.lineTo(prop.x, prop.y - 22);
+        g.lineTo(prop.x + 12, prop.y - 14);
+        g.closePath();
         g.fill();
+        g.fillStyle = '#ffffff';
+        g.fillRect(prop.x - 1.6, prop.y - 12, 3.2, 6);
+        g.fillRect(prop.x - 3.4, prop.y - 10.4, 6.8, 3);
       }
     }
     for (const palm of city.palms) {
@@ -275,29 +507,44 @@ export function createRenderer(canvas) {
       const s = palm.size;
       g.fillStyle = PALETTE.shadow;
       g.beginPath();
-      g.ellipse(palm.x + 7, palm.y + 6, 15 * s, 6 * s, 0, 0, Math.PI * 2);
+      g.ellipse(palm.x + 7, palm.y + 6, 17 * s, 7 * s, 0, 0, Math.PI * 2);
       g.fill();
-      g.strokeStyle = '#4d7d3a';
-      g.lineWidth = 3.4 * s;
-      for (let i = 0; i < 6; i += 1) {
-        const a = (i / 6) * Math.PI * 2 + palm.seed;
+      g.strokeStyle = '#8a6742';
+      g.lineWidth = 3 * s;
+      g.beginPath();
+      g.moveTo(palm.x - 4 * s, palm.y + 7 * s);
+      g.quadraticCurveTo(palm.x - s, palm.y + 3 * s, palm.x, palm.y);
+      g.stroke();
+      g.lineWidth = 3.6 * s;
+      for (let i = 0; i < 7; i += 1) {
+        const a = (i / 7) * Math.PI * 2 + palm.seed;
+        g.strokeStyle = i % 2 === 0 ? '#63954a' : '#4d7d3a';
         g.beginPath();
         g.moveTo(palm.x, palm.y);
         g.quadraticCurveTo(
-          palm.x + Math.cos(a) * 13 * s, palm.y + Math.sin(a) * 13 * s - 4,
-          palm.x + Math.cos(a) * 21 * s, palm.y + Math.sin(a) * 21 * s + 3,
+          palm.x + Math.cos(a) * 16 * s, palm.y + Math.sin(a) * 16 * s - 5,
+          palm.x + Math.cos(a) * 26 * s, palm.y + Math.sin(a) * 26 * s + 4,
         );
         g.stroke();
       }
-      g.fillStyle = '#7d5a36';
+      g.fillStyle = '#6e4f30';
       g.beginPath();
-      g.arc(palm.x, palm.y, 3.6 * s, 0, Math.PI * 2);
+      g.arc(palm.x - 3 * s, palm.y + 2 * s, 2.4 * s, 0, Math.PI * 2);
+      g.arc(palm.x + 3 * s, palm.y + 3 * s, 2.2 * s, 0, Math.PI * 2);
       g.fill();
     }
     for (const lamp of city.lamps) {
       if (!inView(lamp.x, lamp.y, 30)) continue;
+      g.fillStyle = 'rgba(255,190,90,0.16)';
+      g.beginPath();
+      g.arc(lamp.x, lamp.y, 8, 0, Math.PI * 2);
+      g.fill();
       g.fillStyle = '#3a3f4a';
       g.fillRect(lamp.x - 1.5, lamp.y - 1.5, 3, 3);
+      g.fillStyle = '#ffd9a0';
+      g.beginPath();
+      g.arc(lamp.x, lamp.y, 1.8, 0, Math.PI * 2);
+      g.fill();
     }
   }
 
@@ -336,6 +583,9 @@ export function createRenderer(canvas) {
     g.beginPath();
     g.arc(x, y, 9.5, 0, Math.PI * 2);
     g.fill();
+    g.strokeStyle = 'rgba(24,14,8,0.35)';
+    g.lineWidth = 1.4;
+    g.stroke();
     g.fillStyle = PALETTE.skin;
     g.beginPath();
     g.arc(x + Math.cos(angle) * 4, y + Math.sin(angle) * 4, 6, 0, Math.PI * 2);
@@ -348,10 +598,37 @@ export function createRenderer(canvas) {
     g.save();
     g.translate(car.x, car.y);
     g.rotate(car.angle);
+    if (car.kind === 'police') {
+      // The light bar throws red and blue pools onto the asphalt, swapping sides
+      // with the flash phase so a still frame still reads as lights on.
+      const flash = Math.floor(time * 2.6) % 2 === 0;
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      for (const side of [-1, 1]) {
+        const hot = (side < 0) === flash;
+        const grad = g.createRadialGradient(side * 6, 0, 2, side * 6, 0, 40);
+        grad.addColorStop(0, side < 0
+          ? (hot ? 'rgba(255,50,40,0.65)' : 'rgba(255,50,40,0.20)')
+          : (hot ? 'rgba(70,130,255,0.20)' : 'rgba(70,130,255,0.65)'));
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = grad;
+        g.beginPath();
+        g.arc(side * 6, 0, 40, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.restore();
+    }
     g.fillStyle = PALETTE.shadow;
     g.fillRect(-w / 2 + 5, -h / 2 + 6, w, h);
     g.fillStyle = car.color;
     roundRect(-w / 2, -h / 2, w, h, 6);
+    g.fill();
+    g.strokeStyle = 'rgba(16,10,8,0.55)';
+    g.lineWidth = 1.8;
+    g.stroke();
+    // Sun gloss down the spine so the paint reads as paint, not paper.
+    g.fillStyle = 'rgba(255,255,255,0.16)';
+    roundRect(-w * 0.32, -h * 0.2, w * 0.6, h * 0.4, 4);
     g.fill();
     if (car.kind === 'police') {
       g.fillStyle = '#22242c';
@@ -557,6 +834,18 @@ export function createRenderer(canvas) {
       g.fillStyle = `rgba(200,30,20,${Math.min(0.32, game.flash * 0.5)})`;
       g.fillRect(0, 0, view.w, view.h);
     }
+    // Late-sun vignette: shade pools at the edges so the centre of the action glows.
+    if (!vignette || vignette.w !== view.w || vignette.h !== view.h) {
+      const grad = g.createRadialGradient(
+        view.w / 2, view.h * 0.42, Math.min(view.w, view.h) * 0.42,
+        view.w / 2, view.h * 0.5, Math.max(view.w, view.h) * 0.78,
+      );
+      grad.addColorStop(0, 'rgba(60,26,8,0)');
+      grad.addColorStop(1, 'rgba(60,26,8,0.20)');
+      vignette = { w: view.w, h: view.h, grad };
+    }
+    g.fillStyle = vignette.grad;
+    g.fillRect(0, 0, view.w, view.h);
     if (screen === SCREEN_TITLE) {
       drawTitle(game);
     } else {
